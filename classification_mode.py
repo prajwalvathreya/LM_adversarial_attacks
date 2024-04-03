@@ -22,7 +22,7 @@ def tokenize_dataset(dataset, tokenizer):
             continue
 
         tokenized_text = tokenizer(sample["text"], return_tensors="pt", padding="max_length", max_length=1024).to(device)
-        tokenized_label = torch.tensor(sample["label"]).to(device)
+        tokenized_label = torch.tensor([sample["label"]]).to(device)
 
         tokenized_labels.append(tokenized_label)
         tokenized_input.append(tokenized_text)
@@ -59,7 +59,8 @@ class TransformerDecoder(nn.Module):
 
         x = self.fc(x).to(device)
 
-        return torch.sigmoid(x).squeeze(0)
+        x = torch.sigmoid(x)
+        return x
     
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=5000):
@@ -80,7 +81,7 @@ class PositionalEncoding(nn.Module):
 
 model = TransformerDecoder(tokenizer.vocab_size)
 
-def train(model, train_dataset, epochs=1):
+def train(model, train_dataset, epochs=10):
 
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -90,15 +91,14 @@ def train(model, train_dataset, epochs=1):
     # num = len(train_dataset)
 
     for epoch in tqdm(range(epochs)):
-        for idx, vals in tqdm(enumerate(train_dataset)):
+        epoch_loss = 0
+        for idx, vals in enumerate(train_dataset):
             sample, labels = vals
             optimizer.zero_grad()
             output = model(sample["input_ids"]).to(device)
             loss = criterion(output, labels).to(device)
             loss.backward()
             optimizer.step()
-            if idx // 100 == 0:
-                print(overall_loss)
             overall_loss += loss.item()
         print("Epoch {}".format(epoch)," -- ", "Loss : ",overall_loss)
 
