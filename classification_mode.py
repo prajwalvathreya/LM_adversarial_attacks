@@ -80,21 +80,25 @@ class PositionalEncoding(nn.Module):
 
 model = TransformerDecoder(tokenizer.vocab_size)
 
-def train(model, train_dataset, epochs=10):
+def train(model, train_dataset, epochs=1):
 
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
 
     overall_loss = 0
+    # num = len(train_dataset)
 
     for epoch in tqdm(range(epochs)):
-        for sample, labels in train_dataset:
+        for idx, vals in tqdm(enumerate(train_dataset)):
+            sample, labels = vals
             optimizer.zero_grad()
             output = model(sample["input_ids"]).to(device)
             loss = criterion(output, labels).to(device)
             loss.backward()
             optimizer.step()
+            if idx // 100 == 0:
+                print(overall_loss)
             overall_loss += loss.item()
         print("Epoch {}".format(epoch)," -- ", "Loss : ",overall_loss)
 
