@@ -1,0 +1,109 @@
+from datasets import load_dataset
+from transformers import GPT2Tokenizer
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+
+
+dataset = load_dataset('imdb', split='train')  # Load the IMDB dataset  
+
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+tokenizer.pad_token = tokenizer.eos_token
+
+
+def tokenize_dataset(dataset, tokenizer):
+    tokenized_input = []
+    tokenized_labels = []
+    for sample in dataset:
+
+        if len(sample["text"]) > 1024:
+            continue
+
+        tokenized_text = tokenizer(sample["text"], return_tensors="pt", padding="max_length", max_length=1024)
+        tokenized_label = torch.tensor(sample["label"])
+
+        tokenized_labels.append(tokenized_label)
+        tokenized_input.append(tokenized_text)
+
+    return tokenized_input, tokenized_labels
+
+train_dataset, train_labels = tokenize_dataset(dataset, tokenizer)
+
+class TransformerDecoder(nn.Module):
+    def __init__(self, vocab_size, embed_dim=32, num_heads=8, hidden_dim=16, num_layers=1, dropout=0.1):
+        super(TransformerDecoder, self).__init__()
+        
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.positional_encoding = PositionalEncoding(embed_dim, dropout=dropout)
+        
+        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout)
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers)
+
+        self.flatten = nn.Flatten()
+
+        self.fc = nn.Linear(32768, 1)
+        
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x = self.positional_encoding(x)
+
+        memory = x.clone()
+    
+        # Pass through transformer decoder layers
+        x = self.transformer_decoder(x, memory)
+
+        x = self.flatten(x)
+
+        x = self.fc(x)
+
+        return torch.sigmoid(x).squeeze(0)
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+        
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
+
+model = TransformerDecoder(tokenizer.vocab_size)
+
+def train(model, train_dataset, epochs=1):
+
+    model.train()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(epochs):
+        for sample, labels in train_dataset:
+            optimizer.zero_grad()
+            output = model(sample["input_ids"])
+            loss = criterion(output, labels)
+            loss.backward()
+            optimizer.step()
+            print(loss.item())
+
+
+# inference function
+def inference(model, text):
+
+    model.eval()
+    tokenized_text = tokenizer(text, return_tensors="pt")
+    output = model(tokenized_text["input_ids"])
+
+    return output.argmax().item()
+
+data = zip(train_dataset, train_labels)
+
+train(model, data)
