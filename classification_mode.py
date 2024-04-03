@@ -4,13 +4,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from tqdm import tqdm
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 dataset = load_dataset('imdb', split='train')  # Load the IMDB dataset  
 
 tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 tokenizer.pad_token = tokenizer.eos_token
-
 
 def tokenize_dataset(dataset, tokenizer):
     tokenized_input = []
@@ -20,8 +21,8 @@ def tokenize_dataset(dataset, tokenizer):
         if len(sample["text"]) > 1024:
             continue
 
-        tokenized_text = tokenizer(sample["text"], return_tensors="pt", padding="max_length", max_length=1024)
-        tokenized_label = torch.tensor(sample["label"])
+        tokenized_text = tokenizer(sample["text"], return_tensors="pt", padding="max_length", max_length=1024).to(device)
+        tokenized_label = torch.tensor(sample["label"]).to(device)
 
         tokenized_labels.append(tokenized_label)
         tokenized_input.append(tokenized_text)
@@ -34,32 +35,32 @@ class TransformerDecoder(nn.Module):
     def __init__(self, vocab_size, embed_dim=32, num_heads=8, hidden_dim=16, num_layers=1, dropout=0.1):
         super(TransformerDecoder, self).__init__()
         
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.positional_encoding = PositionalEncoding(embed_dim, dropout=dropout)
+        self.embedding = nn.Embedding(vocab_size, embed_dim).to(device)
+        self.positional_encoding = PositionalEncoding(embed_dim, dropout=dropout).to(device)
         
-        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout)
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers)
+        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout).to(device)
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers).to(device)
 
-        self.flatten = nn.Flatten()
+        self.flatten = nn.Flatten().to(device)
 
-        self.fc = nn.Linear(32768, 1)
+        self.fc = nn.Linear(32768, 1).to(device)
         
 
     def forward(self, x):
-        x = self.embedding(x)
-        x = self.positional_encoding(x)
+        x = self.embedding(x).to(device)
+        x = self.positional_encoding(x).to(device)
 
-        memory = x.clone()
+        memory = x.clone().to(device)
     
         # Pass through transformer decoder layers
-        x = self.transformer_decoder(x, memory)
+        x = self.transformer_decoder(x, memory).to(device)
 
-        x = self.flatten(x)
+        x = self.flatten(x).to(device)
 
-        x = self.fc(x)
+        x = self.fc(x).to(device)
 
         return torch.sigmoid(x).squeeze(0)
-
+    
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -79,21 +80,23 @@ class PositionalEncoding(nn.Module):
 
 model = TransformerDecoder(tokenizer.vocab_size)
 
-def train(model, train_dataset, epochs=1):
+def train(model, train_dataset, epochs=10):
 
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
 
-    for epoch in range(epochs):
+    overall_loss = 0
+
+    for epoch in tqdm(range(epochs)):
         for sample, labels in train_dataset:
             optimizer.zero_grad()
-            output = model(sample["input_ids"])
-            loss = criterion(output, labels)
+            output = model(sample["input_ids"]).to(device)
+            loss = criterion(output, labels).to(device)
             loss.backward()
             optimizer.step()
-            print(loss.item())
-
+            overall_loss += loss.item()
+        print("Epoch {}".format(epoch)," -- ", "Loss : ",overall_loss)
 
 # inference function
 def inference(model, text):
