@@ -5,8 +5,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+import os
 
-device = 'cuda' if torch.backends.mps.is_available() else 'cpu'
+print("Script Started")
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+print(f"Using {device} for training")
 
 # Load the IMDB dataset
 dataset = load_dataset('imdb', split='train')
@@ -82,7 +87,9 @@ def train(model, data_loader, epochs=10):
     criterion = nn.BCELoss()
 
     for epoch in tqdm(range(epochs), desc="Epoch"):
+        
         total_loss = 0
+
         for input_ids, labels in data_loader:
             input_ids, labels = input_ids.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -91,6 +98,10 @@ def train(model, data_loader, epochs=10):
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+
+        if (epoch+1) % 2 == 0:
+            torch.save(model.state_dict(), f"model_states/model_epoch_{epoch+1}.pt")
+        
         print(f"Epoch {epoch+1}: Loss = {total_loss / len(data_loader)}")
 
 if __name__ == '__main__':
