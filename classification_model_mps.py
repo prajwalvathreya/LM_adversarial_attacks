@@ -79,13 +79,13 @@ class TransformerDecoder(nn.Module):
 
 model = TransformerDecoder(tokenizer.vocab_size).to(device)
 
-def train(model, data_loader, epochs=10):
+def train(model, data_loader, epochs=40):
     
     model.train()
     
-    optimizer = optim.Adam(model.parameters(), lr=0.5)
+    optimizer = optim.Adam(model.parameters(), lr=0.005)
 
-    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.8)
 
     criterion = nn.BCELoss()
 
@@ -104,7 +104,7 @@ def train(model, data_loader, epochs=10):
         lr_scheduler.step()
 
         if epoch+1 % 2 == 0:
-            torch.save(model.state_dict(), f"model_states/model_epoch_{epoch+1}.pt")
+            torch.save(model.state_dict(), r"model_states/model_epoch_{}.pt".format(epoch+1))
 
 if __name__ == '__main__':
     train(model, data_loader)
