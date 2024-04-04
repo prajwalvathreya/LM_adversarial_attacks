@@ -6,7 +6,11 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+print("Script Started")
+
 device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+
+print(f"Using {device} for training")
 
 # Load the IMDB dataset
 dataset = load_dataset('imdb', split='train')
@@ -15,7 +19,7 @@ tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 tokenizer.pad_token = tokenizer.eos_token
 
 class IMDbDataset(Dataset):
-    def __init__(self, dataset, tokenizer, max_length=1024):
+    def __init__(self, dataset, tokenizer, max_length=256):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -31,7 +35,7 @@ class IMDbDataset(Dataset):
         return input_ids, label
 
 imdb_dataset = IMDbDataset(dataset, tokenizer)
-data_loader = DataLoader(imdb_dataset, batch_size=32, shuffle=True, num_workers=2)
+data_loader = DataLoader(imdb_dataset, batch_size=32, shuffle=True, num_workers=0)
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -50,7 +54,7 @@ class PositionalEncoding(nn.Module):
 
 class TransformerDecoder(nn.Module):
 
-    def __init__(self, vocab_size, embed_dim=768, num_heads=12, hidden_dim=3072, num_layers=1, dropout=0.1):
+    def __init__(self, vocab_size, embed_dim=32, num_heads=2, hidden_dim=128, num_layers=1, dropout=0.1):
         super(TransformerDecoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.pos_encoder = PositionalEncoding(embed_dim)
@@ -78,7 +82,11 @@ model = TransformerDecoder(tokenizer.vocab_size).to(device)
 def train(model, data_loader, epochs=10):
     
     model.train()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    
+    optimizer = optim.Adam(model.parameters(), lr=0.5)
+
+    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+
     criterion = nn.BCELoss()
 
     for epoch in tqdm(range(epochs), desc="Epoch"):
@@ -91,7 +99,12 @@ def train(model, data_loader, epochs=10):
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+        
         print(f"Epoch {epoch+1}: Loss = {total_loss / len(data_loader)}")
+        lr_scheduler.step()
+
+        if epoch+1 % 2 == 0:
+            torch.save(model.state_dict(), f"model_states/model_epoch_{epoch+1}.pt")
 
 if __name__ == '__main__':
     train(model, data_loader)
