@@ -3,70 +3,39 @@ from transformers import GPT2Tokenizer
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if torch.backends.mps.is_available() else 'cpu'
 
-dataset = load_dataset('imdb', split='train')  # Load the IMDB dataset  
+# Load the IMDB dataset
+dataset = load_dataset('imdb', split='train')
 
-tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 tokenizer.pad_token = tokenizer.eos_token
 
-def tokenize_dataset(dataset, tokenizer):
-    tokenized_input = []
-    tokenized_labels = []
-    for sample in dataset:
+class IMDbDataset(Dataset):
+    def __init__(self, dataset, tokenizer, max_length=1024):
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.max_length = max_length
 
-        if len(sample["text"]) > 1024:
-            continue
+    def __len__(self):
+        return len(self.dataset)
 
-        tokenized_text = tokenizer(sample["text"], return_tensors="pt", padding="max_length", max_length=1024).to(device)
-        tokenized_label = torch.tensor([sample["label"]]).to(device)
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        encoded_sample = self.tokenizer(sample['text'], max_length=self.max_length, truncation=True, padding='max_length', return_tensors="pt")
+        input_ids = encoded_sample['input_ids'].squeeze(0)  # Remove batch dimension
+        label = torch.tensor(sample['label'], dtype=torch.float)
+        return input_ids, label
 
-        tokenized_labels.append(tokenized_label)
-        tokenized_input.append(tokenized_text)
+imdb_dataset = IMDbDataset(dataset, tokenizer)
+data_loader = DataLoader(imdb_dataset, batch_size=32, shuffle=True, num_workers=2)
 
-    return tokenized_input, tokenized_labels
-
-train_dataset, train_labels = tokenize_dataset(dataset, tokenizer)
-
-class TransformerDecoder(nn.Module):
-    def __init__(self, vocab_size, embed_dim=32, num_heads=8, hidden_dim=16, num_layers=1, dropout=0.1):
-        super(TransformerDecoder, self).__init__()
-        
-        self.embedding = nn.Embedding(vocab_size, embed_dim).to(device)
-        self.positional_encoding = PositionalEncoding(embed_dim, dropout=dropout).to(device)
-        
-        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout).to(device)
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers).to(device)
-
-        self.flatten = nn.Flatten().to(device)
-
-        self.fc = nn.Linear(32768, 1).to(device)
-        
-
-    def forward(self, x):
-        x = self.embedding(x).to(device)
-        x = self.positional_encoding(x).to(device)
-
-        memory = x.clone().to(device)
-    
-        # Pass through transformer decoder layers
-        x = self.transformer_decoder(x, memory).to(device)
-
-        x = self.flatten(x).to(device)
-
-        x = self.fc(x).to(device)
-
-        x = torch.sigmoid(x)
-        return x
-    
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
+    def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
@@ -74,45 +43,55 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
-        
+
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
-        return self.dropout(x)
+        return x
 
-model = TransformerDecoder(tokenizer.vocab_size)
+class TransformerDecoder(nn.Module):
 
-def train(model, train_dataset, epochs=10):
+    def __init__(self, vocab_size, embed_dim=768, num_heads=12, hidden_dim=3072, num_layers=1, dropout=0.1):
+        super(TransformerDecoder, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.pos_encoder = PositionalEncoding(embed_dim)
+        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout)
+        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        self.fc = nn.Linear(embed_dim, 1)
+        self.init_weights()
 
+    def init_weights(self):
+        initrange = 0.1
+        self.embedding.weight.data.uniform_(-initrange, initrange)
+        self.fc.weight.data.uniform_(-initrange, initrange)
+        self.fc.bias.data.zero_()
+
+    def forward(self, input_ids):
+        embedded = self.embedding(input_ids)
+        encoded = self.pos_encoder(embedded)
+        output = self.transformer_decoder(encoded, encoded)
+        output = output.mean(dim=1)
+        output = self.fc(output)
+        return torch.sigmoid(output).squeeze()
+
+model = TransformerDecoder(tokenizer.vocab_size).to(device)
+
+def train(model, data_loader, epochs=10):
+    
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.BCELoss()
 
-    # num = len(train_dataset)
-
-    for epoch in tqdm(range(epochs)):
-        
-        overall_loss = 0
-
-        for idx, vals in enumerate(train_dataset):
-            sample, labels = vals
+    for epoch in tqdm(range(epochs), desc="Epoch"):
+        total_loss = 0
+        for input_ids, labels in data_loader:
+            input_ids, labels = input_ids.to(device), labels.to(device)
             optimizer.zero_grad()
-            output = model(sample["input_ids"]).to(device)
-            loss = criterion(output, labels).to(device)
+            outputs = model(input_ids)
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            overall_loss += loss.item()
+            total_loss += loss.item()
+        print(f"Epoch {epoch+1}: Loss = {total_loss / len(data_loader)}")
 
-        print("Epoch {}".format(epoch)," -- ", "Loss : ",overall_loss)
-
-# inference function
-def inference(model, text):
-
-    model.eval()
-    tokenized_text = tokenizer(text, return_tensors="pt")
-    output = model(tokenized_text["input_ids"])
-
-    return output.argmax().item()
-
-data = zip(train_dataset, train_labels)
-
-train(model, data)
+if __name__ == '__main__':
+    train(model, data_loader)

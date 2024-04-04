@@ -49,6 +49,7 @@ class PositionalEncoding(nn.Module):
         return x
 
 class TransformerDecoder(nn.Module):
+
     def __init__(self, vocab_size, embed_dim=768, num_heads=12, hidden_dim=3072, num_layers=1, dropout=0.1):
         super(TransformerDecoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim)
