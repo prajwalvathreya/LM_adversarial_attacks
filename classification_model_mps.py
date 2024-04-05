@@ -1,5 +1,6 @@
 from datasets import load_dataset
 from transformers import GPT2Tokenizer
+from transformers import GPT2Model
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,7 +16,11 @@ print(f"Using {device} for training")
 # Load the IMDB dataset
 dataset = load_dataset('imdb', split='train')
 
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+
+with torch.no_grad():
+    attack_model = GPT2Model.from_pretrained('openai-community/gpt2', output_hidden_states = True).to(device)
+
 tokenizer.pad_token = tokenizer.eos_token
 
 class IMDbDataset(Dataset):
@@ -54,10 +59,11 @@ class PositionalEncoding(nn.Module):
 
 class TransformerDecoder(nn.Module):
 
-    def __init__(self, vocab_size, embed_dim=32, num_heads=2, hidden_dim=128, num_layers=1, dropout=0.1):
+    def __init__(self, vocab_size, embed_dim=768, num_heads=2, hidden_dim=768, num_layers=1, dropout=0.1):
         super(TransformerDecoder, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.pos_encoder = PositionalEncoding(embed_dim)
+        # self.embedding = nn.Embedding(vocab_size, embed_dim)
+        # self.pos_encoder = PositionalEncoding(embed_dim)
+        self.embedding = attack_model.get_input_embeddings()
         decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads, dim_feedforward=hidden_dim, dropout=dropout)
         self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         self.fc = nn.Linear(embed_dim, 1)
@@ -65,14 +71,14 @@ class TransformerDecoder(nn.Module):
 
     def init_weights(self):
         initrange = 0.1
-        self.embedding.weight.data.uniform_(-initrange, initrange)
+        # self.embedding.weight.data.uniform_(-initrange, initrange)
         self.fc.weight.data.uniform_(-initrange, initrange)
         self.fc.bias.data.zero_()
 
     def forward(self, input_ids):
-        embedded = self.embedding(input_ids)
-        encoded = self.pos_encoder(embedded)
-        output = self.transformer_decoder(encoded, encoded)
+        # embedded = self.embedding(input_ids)
+        # encoded = self.pos_encoder(embedded)
+        output = self.transformer_decoder(self.embedding, self.embedding)
         output = output.mean(dim=1)
         output = self.fc(output)
         return torch.sigmoid(output).squeeze()
