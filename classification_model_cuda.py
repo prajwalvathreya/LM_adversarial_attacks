@@ -19,7 +19,7 @@ tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 tokenizer.pad_token = tokenizer.eos_token
 
 class IMDbDataset(Dataset):
-    def __init__(self, dataset, tokenizer, max_length=256):
+    def __init__(self, dataset, tokenizer, max_length=384):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -35,7 +35,7 @@ class IMDbDataset(Dataset):
         return input_ids, label
 
 imdb_dataset = IMDbDataset(dataset, tokenizer)
-data_loader = DataLoader(imdb_dataset, batch_size=32, shuffle=True, num_workers=2)
+data_loader = DataLoader(imdb_dataset, batch_size=64, shuffle=True, num_workers=2)
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -53,7 +53,7 @@ class PositionalEncoding(nn.Module):
         return x
 
 class TransformerDecoder(nn.Module):
-    def __init__(self, vocab_size, embed_dim=768, num_heads=2, hidden_dim=2048, num_layers=1, dropout=0.1):
+    def __init__(self, vocab_size, embed_dim=768, num_heads=2, hidden_dim=2048, num_layers=2, dropout=0.1):
         super(TransformerDecoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.pos_encoder = PositionalEncoding(embed_dim)
@@ -80,18 +80,18 @@ class TransformerDecoder(nn.Module):
 
 model = TransformerDecoder(tokenizer.vocab_size).to(device)
 
-model.load_state_dict(torch.load(r"model_states\model_epoch_20.pt"), strict=False)
+# model.load_state_dict(torch.load(r"model_states\model_epoch_20.pt"), strict=False)
 
-for param in model.parameters():
-    param.requires_grad = True
+# for param in model.parameters():
+#     param.requires_grad = True
 
-def train(model, data_loader, epochs=20):
+def train(model, data_loader, epochs=40):
     
     model.train()
     
-    optimizer = optim.Adam(model.parameters(), lr=0.005)
+    optimizer = optim.Adam(model.parameters(), lr=0.05)
 
-    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.8)
+    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
 
     criterion = nn.BCELoss()
 
@@ -107,7 +107,7 @@ def train(model, data_loader, epochs=20):
             total_loss += loss.item()
         
         if (epoch+1) % 2 == 0:
-            torch.save(model.state_dict(), r"model_states/model_continued_epoch_{}.pt".format(epoch+1))
+            torch.save(model.state_dict(), r"updated_states/model_epoch_{}.pt".format(epoch+1))
             
         print(f"Epoch {epoch+1}: Loss = {total_loss / len(data_loader)}")
         lr_scheduler.step()
