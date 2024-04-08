@@ -52,11 +52,8 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
 
     lambda_similarity = 20
     lambda_perp = 1
-    
-    print("device", device)
 
     # for idx in range(start_index, end_index):
-    print(input_ids)
     target_model_logits = target_model(input_ids = input_ids.to(device)).logits
 
     predicted_class = target_model_logits.argmax()
