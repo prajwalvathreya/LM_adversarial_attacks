@@ -47,10 +47,10 @@ def run_inference(input_data: InputData):
 @app.post("/adversarial_example")
 def gen_adversarial_example(input_data: InputData, input_label: int):
 
-    target_model = load_target_model(device)
-    attacker_model = load_attacker_model(device)
-    processed_dataset = process_dataset(tokenizer, input_data.input_text, device)
-    tm_embeddings, am_embeddings = load_embeddings(tokenizer, device, target_model, attacker_model)
+    target_model = load_target_model().to(device)
+    attacker_model = load_attacker_model(device).to(device)
+    processed_dataset = process_dataset(tokenizer, input_data.input_text)
+    tm_embeddings, am_embeddings = load_embeddings(tokenizer, target_model, attacker_model)
     original_pred, original_text, adversarial_text, adversarial_pred = train(target_model, attacker_model, inputs = processed_dataset['input_ids'], labels = torch.tensor(input_label, dtype=torch.long), am_embeddings = am_embeddings.to(device), tm_embeddings = tm_embeddings.to(device), device = device, tokenizer = tokenizer)
     
     return {"original_text": original_text, "original_pred": original_pred, "adversarial_text": adversarial_text, "adversarial_pred": adversarial_pred}
