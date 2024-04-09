@@ -12,8 +12,8 @@ def load_attacker_model():
     attacker_model = GPT2LMHeadModel.from_pretrained('openai-community/gpt2', output_hidden_states = True)
     return attacker_model
 
-def process_dataset(tokenizer, text, max_length = 256):
-    input = tokenizer(text, max_length=max_length, truncation=True, padding='max_length', return_tensors = "pt")
+def process_dataset(tokenizer, text, max_length = 512):
+    input = tokenizer(text, max_length=max_length, truncation=True, return_tensors = "pt")
     return input
 
 def log_perplexity(logits, coeffs):
@@ -44,13 +44,13 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
     # set up
     number_of_iterations = 100
     batch_size = 1
-    number_of_gumbel_samples = 5
+    number_of_gumbel_samples = 10
     loss_margin = 5
     adversarial_log_coeffs, original_text, adversarial_text = [], [], []
     
     token_errors = []
 
-    lambda_similarity = 20
+    lambda_similarity = 70
     lambda_perp = 1
 
     # for idx in range(start_index, end_index):
