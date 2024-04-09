@@ -56,8 +56,8 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
     # for idx in range(start_index, end_index):
     target_model_logits = target_model(input_ids = input_ids.to(device)).logits
 
-    predicted_class = target_model_logits.argmax()
-    print(f"1. The sentiment predicted by the model is: {'Positive' if predicted_class == 1 else 'Negative'}, Actual: {label}")
+    original_pred = target_model_logits.argmax()
+    # print(f"1. The sentiment predicted by the model is: {'Positive' if predicted_class == 1 else 'Negative'}, Actual: {label}")
 
     with torch.no_grad():
         # get the o/p from the last layer
@@ -65,7 +65,7 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
 
         # adv parameter distribution
         adv_log_coeffs = torch.zeros(len(input_ids[0]), tm_embeddings.size(0))
-        print(len(input_ids[0]), adv_log_coeffs)
+        # print(len(input_ids[0]), adv_log_coeffs)
         indices = torch.arange(adv_log_coeffs.size(0)).long()
         adv_log_coeffs[indices, torch.LongTensor(input_ids)] = 15
         adv_log_coeffs = adv_log_coeffs.to(device)
@@ -102,7 +102,7 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
     # Original text, logits
     text = tokenizer.decode(input_ids.squeeze(0))
     original_text = text
-    original_pred = target_model_logits
+    # original_pred = target_model_logits
 
     # Adversarial text, logits
     with torch.no_grad():
