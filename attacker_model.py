@@ -172,16 +172,3 @@ if __name__ == '__main__':
     tm_embeddings, am_embeddings = load_embeddings()
     original_text, adversarial_text = train(target_model, attacker_model, inputs = processed_dataset['input_ids'], labels = processed_dataset['label'], am_embeddings  = am_embeddings, tm_embeddings = tm_embeddings)
     print(original_text, adversarial_text)
-
-
-
-
-
-
-
-
-
-
-
-
-

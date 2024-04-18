@@ -124,14 +124,3 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
         adversarial_log_coeffs.append(adv_log_coeffs)
     
     return original_pred, original_text, adversarial_text, adversarial_pred
-
-
-
-
-
-
-
-
-
-
-
