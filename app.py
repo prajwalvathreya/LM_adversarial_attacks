@@ -51,6 +51,6 @@ def gen_adversarial_example(input_data: InputData, input_label: int):
     attacker_model = load_attacker_model().to(device)
     processed_dataset = process_dataset(tokenizer, input_data.input_text)
     tm_embeddings, am_embeddings = load_embeddings(tokenizer, device, target_model, attacker_model)
-    original_pred, original_text, adversarial_text, adversarial_pred = train(target_model, attacker_model, processed_dataset['input_ids'], label = torch.tensor(input_label, dtype=torch.long), am_embeddings = am_embeddings.to(device), tm_embeddings = tm_embeddings.to(device), device = device, tokenizer = tokenizer)
+    original_pred, original_text, adversarial_text, adversarial_pred,  precision, recall, f1_score = train(target_model, attacker_model, processed_dataset['input_ids'], label = torch.tensor(input_label, dtype=torch.long), am_embeddings = am_embeddings.to(device), tm_embeddings = tm_embeddings.to(device), device = device, tokenizer = tokenizer)
     
-    return {"original_text": original_text, "original_pred": original_pred.item(), "adversarial_text": adversarial_text, "adversarial_pred": adversarial_pred.item()}
+    return {"original_text": original_text, "original_pred": original_pred.item(), "adversarial_text": adversarial_text, "adversarial_pred": adversarial_pred.item(), "precision": precision, "recall": recall, "f1_score": f1_score}

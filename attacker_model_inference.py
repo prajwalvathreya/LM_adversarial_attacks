@@ -116,4 +116,4 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
         # calculate bert score
         precision, recall, f1_score = score([adversarial_text], [original_text], lang = "en")
     
-    return original_pred, original_text, adversarial_text, adversarial_pred, precision, recall, f1_score
+    return original_pred, original_text, adversarial_text, adversarial_pred, precision.item(), recall.item(), f1_score.item()
