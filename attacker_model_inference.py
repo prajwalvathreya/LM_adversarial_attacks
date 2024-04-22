@@ -1,7 +1,7 @@
 from transformers import GPT2LMHeadModel, AutoModelForSequenceClassification
 import torch
 import torch.nn as nn
-import jiwer
+from bert_score import score
 
 def load_target_model():
     target_model = AutoModelForSequenceClassification.from_pretrained("hipnologo/gpt2-imdb-finetune")
@@ -21,11 +21,6 @@ def log_perplexity(logits, coeffs):
     shift_coeffs = coeffs[:, 1:, :].contiguous()
     shift_logits = shift_logits[:, :, :shift_coeffs.size(2)]
     return -(shift_coeffs * nn.functional.log_softmax(shift_logits, dim=-1)).sum(-1).mean()
-
-def calculate_word_error_rate(reference, hypothesis):
-    reference = " ".join(["%d" % i for i in reference])
-    hypothesis = " ".join(["%d" % i for i in hypothesis])
-    return jiwer.wer(reference, hypothesis)
 
 def load_embeddings(tokenizer, device, target_model, attacker_model):
     with torch.no_grad():
@@ -47,8 +42,6 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
     number_of_gumbel_samples = 10
     loss_margin = 5
     adversarial_log_coeffs, original_text, adversarial_text = [], [], []
-    
-    token_errors = []
 
     lambda_similarity = 70
     lambda_perp = 1
@@ -110,8 +103,6 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
             adversarial_ids = nn.functional.gumbel_softmax(adv_log_coeffs, hard = True).argmax(1).tolist()
             adversarial_text = tokenizer.decode(adversarial_ids)
             x = tokenizer(adversarial_text, max_length = 256, truncation = True, return_tensors = "pt")
-            token_errors.append(calculate_word_error_rate(adversarial_ids, x['input_ids'][0]))
-
             # Attack the model
             adversarial_logit = target_model(input_ids = x['input_ids'].to(device))
             adversarial_logit = adversarial_logit.logits
@@ -122,5 +113,7 @@ def train(target_model, attacker_model, input_ids, label, am_embeddings, tm_embe
                 break
 
         adversarial_log_coeffs.append(adv_log_coeffs)
+        # calculate bert score
+        precision, recall, f1_score = score([adversarial_text], [original_text], lang = "en")
     
-    return original_pred, original_text, adversarial_text, adversarial_pred
+    return original_pred, original_text, adversarial_text, adversarial_pred, precision, recall, f1_score
